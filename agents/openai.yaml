@@ -1,0 +1,4 @@
+interface:
+  display_name: "Android Reverse Skill"
+  short_description: "Decompile Android apps and extract API usage."
+  default_prompt: "Use $android-reverse-skill to analyze this Android package and document its API calls."
