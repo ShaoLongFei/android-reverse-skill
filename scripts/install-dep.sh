@@ -49,7 +49,7 @@ case "$(uname -s)" in
 esac
 
 # Detect package manager
-if command -v brew &>/dev/null; then
+if [[ "${ANDROID_REVERSE_NO_BREW:-}" != "1" ]] && command -v brew &>/dev/null; then
   PKG_MANAGER="brew"
 elif command -v apt-get &>/dev/null; then
   PKG_MANAGER="apt"
@@ -207,9 +207,11 @@ install_jadx() {
   # Try brew first (cleanest)
   if [[ "$PKG_MANAGER" == "brew" ]]; then
     info "Installing jadx via Homebrew..."
-    brew install jadx
-    ok "jadx installed via Homebrew"
-    return 0
+    if brew install jadx; then
+      ok "jadx installed via Homebrew"
+      return 0
+    fi
+    info "Homebrew install failed, falling back to direct GitHub release install."
   fi
 
   # User-local install from GitHub releases (no sudo needed)
