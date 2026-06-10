@@ -1,11 +1,11 @@
 ---
 name: android-reverse-skill
-description: Decompile and analyze Android APK, XAPK, JAR, and AAR files with jadx and optional Fernflower/Vineflower; extract HTTP APIs from Retrofit, OkHttp, Volley, WebView, and hardcoded URLs; trace Android call flows from UI or app startup to network layers. Use for Android reverse engineering, APK decompilation, API endpoint extraction, Android app analysis, obfuscation-aware source review, or Chinese requests such as 反编译APK、安卓逆向、提取API、分析安卓应用、追踪调用链.
+description: Extract network APIs from Android APK, XAPK, JAR, and AAR files by decompiling with jadx and searching Retrofit, OkHttp, Volley, WebView, HttpURLConnection, GraphQL/Apollo, WebSocket, gRPC, auth headers, base URLs, resource URLs, certificate pinning, and network security config. Use for Android API endpoint extraction, APK network analysis, call-flow tracing to network layers, or Chinese requests such as 提取API、提取接口、安卓逆向、反编译APK、分析安卓应用网络接口、追踪调用链.
 ---
 
 # Android Reverse Skill
 
-Use this skill to decompile Android packages, inspect their architecture, trace call flows, and document HTTP API behavior. The bundled scripts live next to this file under `scripts/`; detailed techniques live under `references/`.
+Use this skill primarily to extract network APIs from Android packages. Decompile first, then prioritize base URLs, endpoint declarations, request construction, auth headers, transport clients, resource-defined URLs, and the call chains that prove where each API is used. The bundled scripts live next to this file under `scripts/`; detailed techniques live under `references/`.
 
 Operate only on apps, libraries, or malware samples the user is authorized to analyze. If the request appears to target unauthorized access, credential theft, or abuse, stop and keep the response to lawful analysis guidance.
 
@@ -98,17 +98,58 @@ The scripts handle XAPK extraction and split/bundled APK detection. When a thin 
 
 Read `references/jadx-usage.md` or `references/fernflower-usage.md` when tuning decompiler options.
 
-### 3. Analyze Structure
+### 3. Run API-First Discovery
+
+Run a broad network sweep against the full decompiled output root when possible, not only `sources/`, so XML resources and build-time config are included:
+
+```bash
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/
+```
+
+For real apps, first identify app-owned package prefixes from `AndroidManifest.xml` and top-level source packages, then use `--focus` to reduce third-party library noise:
+
+```bash
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --focus com.example.app --focus com.example.sdk
+```
+
+Use targeted passes to isolate noisy areas:
+
+```bash
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --retrofit
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --okhttp
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --auth
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --graphql
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --websocket
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --grpc
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --security
+bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/ --resources
+```
+
+On Windows:
+
+```powershell
+& "$SkillDir\scripts\find-api-calls.ps1" <output>\ -Auth
+& "$SkillDir\scripts\find-api-calls.ps1" <output>\ -GraphQL
+& "$SkillDir\scripts\find-api-calls.ps1" <output>\ -Security
+```
+
+Treat matches as leads, not final API documentation. For each lead, read surrounding source to confirm the actual method, base URL, dynamic path construction, auth behavior, and caller.
+
+### 4. Analyze Network Structure
 
 After decompilation, inspect:
 - `resources/AndroidManifest.xml` for launcher Activity, Application class, components, and network permissions.
+- App-owned package prefixes from manifest and source paths. Use these with `--focus` during API search.
+- `resources/res/values/strings.xml`, `resources/res/xml/network_security_config.xml`, JSON/properties/assets, and Gradle generated constants for URLs and hosts.
 - Top-level packages under `sources/` to separate app code from libraries.
 - Packages or classes named `api`, `network`, `service`, `repository`, `data`, `retrofit`, `http`, `client`, or `interceptor`.
+- Client setup for Retrofit, OkHttp, Volley, Apollo/GraphQL, WebSocket/SSE, gRPC, Ktor, WebView, or `HttpURLConnection`.
+- Auth and security setup: interceptors, `Authorization`, API keys, token refresh, certificate pinning, custom trust managers, and cleartext/network security config.
 - Architecture signals such as Activity/Fragment, ViewModel, Repository, Presenter, Dagger/Hilt modules, or clean architecture layers.
 
 For XAPK or bundled APKs, prioritize the base APK output.
 
-### 4. Trace Call Flows
+### 5. Trace Call Flows
 
 Start from user-visible or initialization entry points and follow calls toward network code:
 - `Application.onCreate()` for dependency injection, base URLs, interceptors, and HTTP client setup.
@@ -121,32 +162,9 @@ When code is obfuscated, anchor on string literals, Retrofit annotations, URL co
 
 Read `references/call-flow-analysis.md` for deeper tracing patterns and commands.
 
-### 5. Extract and Document APIs
+### 6. Document APIs
 
-Run the API search script for a broad sweep:
-
-```bash
-bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/sources/
-```
-
-Targeted searches:
-
-```bash
-bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/sources/ --retrofit
-bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/sources/ --okhttp
-bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/sources/ --urls
-bash "$SKILL_DIR/scripts/find-api-calls.sh" <output>/sources/ --auth
-```
-
-On Windows:
-
-```powershell
-& "$SkillDir\scripts\find-api-calls.ps1" <output>\sources\ -Retrofit
-& "$SkillDir\scripts\find-api-calls.ps1" <output>\sources\ -Urls
-& "$SkillDir\scripts\find-api-calls.ps1" <output>\sources\ -Auth
-```
-
-For each endpoint, read surrounding source and document:
+For each confirmed endpoint or network channel, document:
 - HTTP method and path
 - Base URL
 - Path/query parameters
@@ -154,6 +172,7 @@ For each endpoint, read surrounding source and document:
 - Request body and response type
 - Calling chain from UI/startup to network layer
 - Source file and line number
+- Confidence: confirmed, inferred, or unresolved dynamic construction
 
 Use this concise format:
 
@@ -166,6 +185,7 @@ Use this concise format:
 - Headers/Auth: authorization scheme or token source
 - Response: response type/model
 - Called from: `Activity -> ViewModel -> Repository -> ApiService`
+- Confidence: confirmed
 ```
 
 Read `references/api-extraction-patterns.md` for library-specific patterns and a fuller template.
@@ -174,9 +194,11 @@ Read `references/api-extraction-patterns.md` for library-specific patterns and a
 
 When the workflow completes, return:
 - Decompiled output location
-- Architecture summary
-- API endpoint documentation
-- Important call-flow map
+- Network architecture summary
+- API endpoint/channel documentation
+- Auth, token, and header behavior
+- Important call-flow map for key APIs
+- Security findings relevant to network extraction, such as certificate pinning or cleartext config
 - Dependency or decompiler warnings that affect confidence
 
 Keep raw secrets, tokens, or private keys out of the final answer unless the user explicitly owns the app and asks for secret-handling guidance; prefer describing where they are loaded and how they are used.

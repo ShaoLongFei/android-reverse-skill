@@ -77,6 +77,55 @@ grep -rn 'loadUrl\|evaluateJavascript\|addJavascriptInterface\|WebViewClient\|sh
 
 WebView-based apps may load API endpoints via JavaScript bridges. Look for `@JavascriptInterface` annotated methods.
 
+## GraphQL / Apollo
+
+GraphQL clients often expose one endpoint, then define operations in generated classes or `.graphql`/`.gql` files.
+
+```bash
+# Apollo client setup and GraphQL endpoint
+grep -rni 'ApolloClient\|serverUrl\|graphql\|GraphQL' sources/ resources/
+
+# Operation names and generated calls
+grep -rni 'query \|mutation \|subscription \|\.graphql\|\.gql' sources/ resources/
+```
+
+When documenting GraphQL, capture the GraphQL server URL, operation name, operation type (`query`, `mutation`, `subscription`), variables, auth headers, and caller. Do not treat the GraphQL endpoint alone as complete API coverage; the operation body is the actual API shape.
+
+## WebSocket / SSE
+
+```bash
+grep -rni 'wss://\|ws://\|WebSocket\|newWebSocket\|WebSocketListener\|EventSource\|text/event-stream' sources/ resources/
+```
+
+Document WebSocket/SSE channels with URL, connection headers/auth, message types, subscription payloads, reconnect behavior, and the caller that opens the stream.
+
+## gRPC
+
+```bash
+grep -rni 'ManagedChannel\|ManagedChannelBuilder\|io\.grpc\|newBlockingStub\|newFutureStub\|newStub\|forAddress' sources/
+```
+
+For gRPC, capture host, port, TLS usage, generated service/stub class, method names, metadata/auth interceptors, and protobuf message types.
+
+## Certificate Pinning and Network Security
+
+```bash
+grep -rni 'CertificatePinner\|sha256/\|pin-set\|network_security_config\|cleartextTrafficPermitted\|TrustManager\|HostnameVerifier' sources/ resources/
+```
+
+Certificate pinning and custom trust managers do not define APIs, but they affect reproducibility. Document them with the API host they protect and whether traffic can be intercepted without extra setup.
+
+## Resource and Build-Time URLs
+
+URLs and hosts often live outside Java/Kotlin code:
+
+```bash
+grep -rni 'https://\|http://\|wss://\|BASE_URL\|API_URL\|SERVER_URL\|ENDPOINT' resources/ sources/
+grep -rni 'buildConfigField\|resValue\|manifestPlaceholders\|google-services\|firebase' .
+```
+
+Check `strings.xml`, `network_security_config.xml`, JSON/properties files, assets, generated `BuildConfig`, Gradle files, and environment-specific flavor files.
+
 ## Hardcoded URLs and Secrets
 
 ```bash
@@ -113,7 +162,18 @@ For each discovered API endpoint, document it using this template:
 ## Search Strategy
 
 1. Start with **base URL constants** — find where the API root is configured
-2. Search for **Retrofit interfaces** — they give the clearest picture of all endpoints
-3. Check **interceptors** — they reveal auth schemes and common headers
-4. Search for **hardcoded URLs** — catch any one-off API calls outside the main client
-5. Look for **WebView URLs** — some apps use hybrid web/native approaches
+2. Identify **app-owned package prefixes** from `AndroidManifest.xml` and top-level source paths, then use `--focus <prefix>` to avoid third-party library noise
+3. Search for **resource/build-time URLs** — strings and flavors often hold hosts
+4. Search for **Retrofit interfaces** — they give the clearest picture of REST endpoints
+5. Check **OkHttp clients and interceptors** — they reveal auth schemes and common headers
+6. Search for **GraphQL, WebSocket, and gRPC** — modern apps may not expose REST paths
+7. Search for **hardcoded URLs** — catch one-off calls outside the main client
+8. Check **network security and pinning** — record reproducibility constraints
+9. Look for **WebView URLs and JavaScript bridges** — hybrid apps may call APIs outside native clients
+
+For large APKs, run broad scan once, then focused scans:
+
+```bash
+bash scripts/find-api-calls.sh app-decompiled/
+bash scripts/find-api-calls.sh app-decompiled/ --focus com.example.app --focus com.example.sdk
+```

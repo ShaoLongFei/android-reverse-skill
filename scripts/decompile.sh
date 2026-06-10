@@ -351,9 +351,10 @@ print_structure() {
     local packages=()
     echo
     echo "Top-level packages ($label):"
-    while IFS= read -r pkg; do
-      [[ -n "$pkg" ]] && packages+=("$pkg")
-    done < <(find "$src_dir" -mindepth 1 -maxdepth 3 -type d -printf '%P\n' | sort)
+    while IFS= read -r pkg_dir; do
+      pkg="${pkg_dir#"$src_dir"/}"
+      [[ -n "$pkg" && "$pkg" != "$pkg_dir" ]] && packages+=("$pkg")
+    done < <(find "$src_dir" -mindepth 1 -maxdepth 3 -type d | sort)
 
     local limit=${#packages[@]}
     if (( limit > 20 )); then

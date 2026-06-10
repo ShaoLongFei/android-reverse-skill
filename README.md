@@ -1,6 +1,6 @@
 # android-reverse-skill
 
-Codex skill for Android reverse engineering workflows: decompile APK, XAPK, JAR, and AAR files; inspect Android app structure; trace call flows; and extract HTTP API usage from Retrofit, OkHttp, Volley, WebView, and hardcoded URLs.
+Codex skill for extracting network APIs from Android packages. It decompiles APK, XAPK, JAR, and AAR files; searches Retrofit, OkHttp, Volley, WebView, HttpURLConnection, GraphQL/Apollo, WebSocket, gRPC, resource URLs, auth headers, and network security config; then guides Codex to document endpoints and call flows.
 
 ## Inspiration
 
@@ -50,13 +50,23 @@ Install a missing dependency:
 bash scripts/install-dep.sh jadx
 ```
 
+If Homebrew dependency downloads are slow or unreliable, skip Homebrew and install jadx directly from GitHub releases:
+
+```bash
+ANDROID_REVERSE_NO_BREW=1 bash scripts/install-dep.sh jadx
+```
+
 ## Examples
 
 ```bash
 bash scripts/decompile.sh app.apk
 bash scripts/decompile.sh --deobf app.apk
 bash scripts/decompile.sh --engine both app.apk
-bash scripts/find-api-calls.sh app-decompiled/sources/
+bash scripts/find-api-calls.sh app-decompiled/
+bash scripts/find-api-calls.sh app-decompiled/ --focus com.example.app
+bash scripts/find-api-calls.sh app-decompiled/ --auth
+bash scripts/find-api-calls.sh app-decompiled/ --graphql
+bash scripts/find-api-calls.sh app-decompiled/ --security
 ```
 
 ## Legal Use
